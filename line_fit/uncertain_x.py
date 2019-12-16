@@ -2,7 +2,7 @@ import numpy as np
 from scipy.optimize import minimize
 
 
-def lnlike_unc_abscissa(theta, x, y, x_unc, y_unc, rhoxy = 1):
+def neg_lnlike_unc_abscissa(theta, x, y, x_unc, y_unc, rhoxy = 1):
     """
     Calculate the log-likelihood for line with uncertainties on x and y
     
@@ -27,10 +27,10 @@ def lnlike_unc_abscissa(theta, x, y, x_unc, y_unc, rhoxy = 1):
     
     Returns
     -------
-    lnl : float
+    neg_lnl : float
         The log-likelihood of the data given the model parameters
     """
-    
+    print(theta)
     th, bperp = theta
     lnl = 0.
     v = np.array([[-np.sin(th)], [np.cos(th)]])
@@ -44,8 +44,9 @@ def lnlike_unc_abscissa(theta, x, y, x_unc, y_unc, rhoxy = 1):
         Delta = vT @ Z_matrix - bperp
         Sigma2 = vT @ S_matrix @ v
         lnl -= Delta**2. / (2. * Sigma2)
-        
-    return lnl
+    
+    neg_lnl = -1*lnl
+    return neg_lnl
 
 class UncertainAbscissa():
     '''Object with results of fit including uncertainties on the x-axis
@@ -109,13 +110,13 @@ class UncertainAbscissa():
             raise RuntimeError('''Must associate data with object
                                 run add_data() first''')
         
-        guess_0 = [np.arctan(slope_guess), 
-                   intercept_guess*np.cos(np.arctan(slope_guess))]
+        guess_0 = np.append([np.arctan(slope_guess)], 
+                            [intercept_guess*np.cos(np.arctan(slope_guess))])
                    
-        mle = minimize(lnlike_unc_abscissa, guess_0, method='Powell',
+        mle = minimize(neg_lnlike_unc_abscissa, guess_0, method='BFGS',
                        args=(self.x, self.y, self.x_unc, self.y_unc))
         
         th, bperp = mle.x
         
         self.m = np.tan(th)
-        self.b = bperp, np.cos(th)
+        self.b = bperp/np.cos(th)
