@@ -30,7 +30,7 @@ def neg_lnlike_unc_abscissa(theta, x, y, x_unc, y_unc, rhoxy = 1):
     neg_lnl : float
         The log-likelihood of the data given the model parameters
     """
-    print(theta)
+
     th, bperp = theta
     lnl = 0.
     v = np.array([[-np.sin(th)], [np.cos(th)]])
@@ -104,6 +104,12 @@ class UncertainAbscissa():
         
         b : float
             Maximum-likelihood estimate of the intercept of the line
+        
+        m_unc : float
+            Maximum-likelihood estimate of the uncertainty on the slope
+
+        b_unc : float
+            Maximum-likelihood estimate of the uncertainty on the intercept
         """
         
         if not hasattr(self, 'x_unc'):
@@ -117,6 +123,12 @@ class UncertainAbscissa():
                        args=(self.x, self.y, self.x_unc, self.y_unc))
         
         th, bperp = mle.x
-        
+        th_unc, bperp_unc = np.sqrt(np.diag(mle.hess_inv))
+        cov = mle.hess_inv[1,1]
+                
         self.m = np.tan(th)
+        self.m_unc = th_unc/(np.cos(th))**2
         self.b = bperp/np.cos(th)
+        self.b_unc = bperp*np.sqrt((bperp_unc/bperp)**2 + 
+                                   (np.tan(th)*th_unc)**2 + 
+                                   2*cov*np.cos(th)/bperp)
