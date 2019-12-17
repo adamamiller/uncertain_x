@@ -29,10 +29,10 @@ def lnlike_unc_abscissa(theta, x, y, x_unc, y_unc, rhoxy = 0):
     
     Returns
     -------
-    neg_lnl : float
+    lnl : float
         The log-likelihood of the data given the model parameters
     """
-
+    
     cos_th, bperp = theta
     lnl = 0.
     v = np.array([[-np.sin(np.arccos(cos_th))], [cos_th]])
@@ -47,12 +47,72 @@ def lnlike_unc_abscissa(theta, x, y, x_unc, y_unc, rhoxy = 0):
         Sigma2 = vT @ S_matrix @ v
         lnl -= Delta**2. / (2. * Sigma2)
     
-    return lnl
+    return float(lnl)
 
 def neg_lnlike_unc_abscissa(theta, x, y, x_unc, y_unc, rhoxy=0):
+    """
+    Negative log-likelihood for optimization
+    """
     lnl = lnlike_unc_abscissa(theta, x, y, x_unc, y_unc, rhoxy=rhoxy)
     return -1*lnl
     
+def lnprior_unc_abscissa(theta):
+    """
+    Calculate the log-prior for a line with uncertainties on x and y
+    
+    Parameters
+    ----------
+    theta : tuple
+        Tuple with the "cosine angle" and "perpendicular offset" of 
+        the projected line
+    
+    Returns
+    -------
+    lnp : float
+        The log-prior of the data given the model parameters    
+    """
+    cos_th, bperp = theta
+    if 0 < cos_th < 1:
+        lnp = 0.0
+    else:
+        lnp = -np.inf
+    return lnp
+
+def lnposterior_unc_abscissa(theta, x, y, x_unc, y_unc, rhoxy = 0):
+    """
+    Calculate the log-likelihood for line with uncertainties on x and y
+    
+    Parameters
+    ----------
+    theta : tuple
+        Tuple with the "cosine angle" and "perpendicular offset" of 
+        the projected line
+    
+    x : array-like
+        Measurements for the coordinate projected along the abscissa
+    
+    y : array-like
+        Measurements for the coordinate projected along the ordinate
+    
+    x_unc : array-like
+        Estimate of the uncertainty for the abscissa coordinate. Note - 
+        the uncertainty is assumed to be Gaussian
+    
+    y_unc : array-like
+        Estimate of the uncertainty for the ordinate coordinate. Note - 
+        the uncertainty is assumed to be Gaussian
+    
+    Returns
+    -------
+    lnpost : float
+        The log-posterior of the data given the model parameters
+    """    
+    lnp = lnprior_unc_abscissa(theta)
+    if not np.isfinite(lnp):
+        return -np.inf
+    lnl = lnlike_unc_abscissa(theta, x, y, x_unc, y_unc, rhoxy=rhoxy)
+    return lnl + lnp
+
 class UncertainAbscissa():
     '''Object with results of fit including uncertainties on the x-axis
     '''
@@ -175,7 +235,7 @@ class UncertainAbscissa():
             raise RuntimeError('''Must associate data with object
                                 run add_data() first''')
         
-        guess_0 = np.append([np.arctan(slope_guess)], 
+        guess_0 = np.append([np.cos(np.arctan(slope_guess))], 
                             [intercept_guess*np.cos(np.arctan(slope_guess))])
         
         ndim = len(guess_0)
@@ -185,11 +245,11 @@ class UncertainAbscissa():
         rand_pos = [1 + nfac*np.random.randn(ndim) for i in range(nwalkers)]
         
         sampler = emcee.EnsembleSampler(nwalkers, ndim, 
-                                        lnlike_unc_abscissa, 
+                                        lnposterior_unc_abscissa, 
                                         args=(self.x, self.y, 
                                               self.x_unc, self.y_unc))
         old_tau = np.inf
-        for sample in sampler.sample(rand_pos, 
+        for sample in sampler.sample(guess_0*rand_pos, 
                                      iterations=5e3, 
                                      progress=True):
             if sampler.iteration % int(5e2):
@@ -206,12 +266,12 @@ class UncertainAbscissa():
         samples = sampler.get_chain(discard=int(np.max(tau)), 
                                     # thin=np.max([int(np.max(tau)), 1]),
                                     flat=True)
-        th_samp = samples[:,0]
+        th_samp = np.arccos(samples[:,0])
         bperp_samp = samples[:,1]
         
         self.m_mcmc = np.percentile(np.tan(th_samp), 50)
         self.m_mcmc_unc = np.diff(np.percentile(np.tan(th_samp), 
-                                  (15.865, 84.135)))
+                                  (15.865, 84.135)))[0]/2
         self.b_mcmc = np.percentile(bperp_samp/np.cos(th_samp), 50)
         self.b_mcmc_unc = np.diff(np.percentile(bperp_samp/np.cos(th_samp), 
-                                                (15.865, 84.135)))
+                                                (15.865, 84.135)))[0]/2
